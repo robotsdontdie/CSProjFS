@@ -89,7 +89,7 @@ namespace ProjFS
     ///     <para><c>true</c> if the provider wants to allow the opened file to be returned to the
     ///     caller, <c>false</c> otherwise.</para>
     /// </returns>
-    public delegate bool NotifyFileOpenedCallback(string relativePath, bool isDirectory, uint triggeringProcessId, string triggeringProcessImageFileName, out NotificationType notificationMask);
+    public delegate bool NotifyFileOpenedCallback(string relativePath, bool isDirectory, uint triggeringProcessId, string? triggeringProcessImageFileName, out NotificationType notificationMask);
 
     /// <summary>Indicates that a new file or directory has been created.</summary>
     /// <remarks>
@@ -112,7 +112,7 @@ namespace ProjFS
     ///     wishes to receive for this file.
     ///     <para>If the provider sets this value to 0, it is equivalent to specifying <see cref="NotificationType.UseExistingMask"/>.</para>
     /// </param>
-    public delegate void NotifyNewFileCreatedCallback(string relativePath, bool isDirectory, uint triggeringProcessId, string triggeringProcessImageFileName, out NotificationType notificationMask);
+    public delegate void NotifyNewFileCreatedCallback(string relativePath, bool isDirectory, uint triggeringProcessId, string? triggeringProcessImageFileName, out NotificationType notificationMask);
 
     /// <summary>Indicates that an existing file has been superseded or overwritten.</summary>
     /// <remarks>
@@ -135,7 +135,7 @@ namespace ProjFS
     ///     wishes to receive for this file.
     ///     <para>If the provider sets this value to 0, it is equivalent to specifying <see cref="NotificationType.UseExistingMask"/>.</para>
     /// </param>
-    public delegate void NotifyFileOverwrittenCallback(string relativePath, bool isDirectory, uint triggeringProcessId, string triggeringProcessImageFileName, out NotificationType notificationMask);
+    public delegate void NotifyFileOverwrittenCallback(string relativePath, bool isDirectory, uint triggeringProcessId, string? triggeringProcessImageFileName, out NotificationType notificationMask);
 
     /// <summary>Indicates that a file or directory is about to be deleted.</summary>
     /// <remarks>
@@ -159,7 +159,7 @@ namespace ProjFS
     ///     <para><c>true</c> if the provider wants to allow the delete to happen, false if it wants
     ///     to prevent the delete.</para>
     /// </returns>
-    public delegate bool NotifyPreDeleteCallback(string relativePath, bool isDirectory, uint triggeringProcessId, string triggeringProcessImageFileName);
+    public delegate bool NotifyPreDeleteCallback(string relativePath, bool isDirectory, uint triggeringProcessId, string? triggeringProcessImageFileName);
 
     /// <summary>Indicates that a file or directory is about to be renamed.</summary>
     /// <remarks>
@@ -203,7 +203,7 @@ namespace ProjFS
     ///     <para><c>true</c> if the provider wants to allow the rename to happen, false if it wants
     ///     to prevent the rename.</para>
     /// </returns>
-    public delegate bool NotifyPreRenameCallback(string relativePath, string destinationPath, uint triggeringProcessId, string triggeringProcessImageFileName);
+    public delegate bool NotifyPreRenameCallback(string relativePath, string destinationPath, uint triggeringProcessId, string? triggeringProcessImageFileName);
 
     /// <summary>Indicates that a hard link is about to be created for the file.</summary>
     /// <remarks>
@@ -244,7 +244,7 @@ namespace ProjFS
     ///     <para><c>true</c> if the provider wants to allow the hard link operation to happen, false
     ///     if it wants to prevent the hard link operation.</para>
     /// </returns>
-    public delegate bool NotifyPreCreateHardlinkCallback(string relativePath, string destinationPath, uint triggeringProcessId, string triggeringProcessImageFileName);
+    public delegate bool NotifyPreCreateHardlinkCallback(string relativePath, string destinationPath, uint triggeringProcessId, string? triggeringProcessImageFileName);
 
     /// <summary>
     /// Indicates that a file or directory has been renamed.  The file or directory may have been moved
@@ -291,7 +291,7 @@ namespace ProjFS
     ///     wishes to receive for this file.
     ///     <para>If the provider sets this value to 0, it is equivalent to specifying <see cref="NotificationType.UseExistingMask"/>.</para>
     /// </param>
-    public delegate void NotifyFileRenamedCallback(string relativePath, string destinationPath, bool isDirectory, uint triggeringProcessId, string triggeringProcessImageFileName, out NotificationType notificationMask);
+    public delegate void NotifyFileRenamedCallback(string relativePath, string destinationPath, bool isDirectory, uint triggeringProcessId, string? triggeringProcessImageFileName, out NotificationType notificationMask);
 
     /// <summary>Indicates that a hard link has been created for the file.</summary>
     /// <remarks>
@@ -326,7 +326,7 @@ namespace ProjFS
     ///     information is not available, this will be 0.</param>
     /// <param name="triggeringProcessImageFileName">The image file name corresponding to <paramref name="triggeringProcessId"/>.
     ///     If <paramref name="triggeringProcessId"/> is 0 this will be null.</param>
-    public delegate void NotifyHardlinkCreatedCallback(string relativePath, string destinationPath, uint triggeringProcessId, string triggeringProcessImageFileName);
+    public delegate void NotifyHardlinkCreatedCallback(string relativePath, string destinationPath, uint triggeringProcessId, string? triggeringProcessImageFileName);
 
     /// <summary>
     /// Indicates that a handle has been closed on the file or directory, and that the file was not modified
@@ -347,7 +347,7 @@ namespace ProjFS
     ///     information is not available, this will be 0.</param>
     /// <param name="triggeringProcessImageFileName">The image file name corresponding to <paramref name="triggeringProcessId"/>.
     ///     If <paramref name="triggeringProcessId"/> is 0 this will be null.</param>
-    public delegate void NotifyFileHandleClosedNoModificationCallback(string relativePath, bool isDirectory, uint triggeringProcessId, string triggeringProcessImageFileName);
+    public delegate void NotifyFileHandleClosedNoModificationCallback(string relativePath, bool isDirectory, uint triggeringProcessId, string? triggeringProcessImageFileName);
 
     /// <summary>
     /// Indicates that a handle has been closed on the file or directory, and whether the file was modified
@@ -372,7 +372,7 @@ namespace ProjFS
     ///     information is not available, this will be 0.</param>
     /// <param name="triggeringProcessImageFileName">The image file name corresponding to <paramref name="triggeringProcessId"/>.
     ///     If <paramref name="triggeringProcessId"/> is 0 this will be null.</param>
-    public delegate void NotifyFileHandleClosedFileModifiedOrDeletedCallback(string relativePath, bool isDirectory, bool isFileModified, bool isFileDeleted, uint triggeringProcessId, string triggeringProcessImageFileName);
+    public delegate void NotifyFileHandleClosedFileModifiedOrDeletedCallback(string relativePath, bool isDirectory, bool isFileModified, bool isFileDeleted, uint triggeringProcessId, string? triggeringProcessImageFileName);
 
     /// <summary>
     /// Indicates that the file is about to be converted from a placeholder to a full file, i.e. its
@@ -398,5 +398,5 @@ namespace ProjFS
     ///     <para><c>true</c> if the provider wants to allow the file to be converted to full, <c>false</c>
     ///     if it wants to prevent the file from being converted to full.</para>
     /// </returns>
-    public delegate bool NotifyFilePreConvertToFullCallback(string relativePath, uint triggeringProcessId, string triggeringProcessImageFileName);
+    public delegate bool NotifyFilePreConvertToFullCallback(string relativePath, uint triggeringProcessId, string? triggeringProcessImageFileName);
 }

@@ -61,7 +61,7 @@ namespace ProjFS
         //     ProjFS uses the enumerationId argument to associate the callback invocations
         //     into a single enumeration, meaning that a given set of calls to the enumeration
         //     callbacks will use the same value for enumerationId for the same session.
-        HResult StartDirectoryEnumerationCallback(int commandId, Guid enumerationId, string relativePath, uint triggeringProcessId, string triggeringProcessImageFileName);
+        HResult StartDirectoryEnumerationCallback(int commandId, Guid enumerationId, string relativePath, uint triggeringProcessId, string? triggeringProcessImageFileName);
 
         //
         // Summary:
@@ -140,7 +140,7 @@ namespace ProjFS
         //     If no entries match the search expression specified in filterFileName, or if
         //     all the entries in the directory were added in a previous invocation of this
         //     callback, the provider must return Microsoft.Windows.ProjFS.HResult.Ok.
-        HResult GetDirectoryEnumerationCallback(int commandId, Guid enumerationId, string filterFileName, [MarshalAs(UnmanagedType.U1)] bool restartScan, IDirectoryEnumerationResults result);
+        HResult GetDirectoryEnumerationCallback(int commandId, Guid enumerationId, string? filterFileName, [MarshalAs(UnmanagedType.U1)] bool restartScan, IDirectoryEnumerationResults result);
 
         //
         // Summary:
@@ -209,7 +209,7 @@ namespace ProjFS
         //     To handle this callback, the provider typically calls ProjFS.VirtualizationInstance.WritePlaceholderInfo
         //     to give ProjFS the information for the requested file name. Then the provider
         //     completes the callback.
-        HResult GetPlaceholderInfoCallback(int commandId, string relativePath, uint triggeringProcessId, string triggeringProcessImageFileName);
+        HResult GetPlaceholderInfoCallback(int commandId, string relativePath, uint triggeringProcessId, string? triggeringProcessImageFileName);
 
         //
         // Summary:
@@ -273,6 +273,6 @@ namespace ProjFS
         //     To handle this callback, the provider issues one or more calls to ProjFS.VirtualizationInstance.WriteFile
         //     to give ProjFS the contents of the file's primary data stream. Then the provider
         //     completes the callback.
-        HResult GetFileDataCallback(int commandId, string relativePath, ulong byteOffset, uint length, Guid dataStreamId, byte[] contentId, byte[] providerId, uint triggeringProcessId, string triggeringProcessImageFileName);
+        HResult GetFileDataCallback(int commandId, string relativePath, ulong byteOffset, uint length, Guid dataStreamId, byte[] contentId, byte[] providerId, uint triggeringProcessId, string? triggeringProcessImageFileName);
     }
 }

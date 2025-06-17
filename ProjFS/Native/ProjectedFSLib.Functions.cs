@@ -11,11 +11,19 @@ namespace ProjFS.Native
 
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/nf-projectedfslib-prjclearnegativepathcache
         [LibraryImport("ProjectedFSLib.dll")]
-        internal static partial HResult PrjClearNegativePathCache(IntPtr namespaceVirtualizationContext, out IntPtr totalEntryNumber);
+        internal static partial HResult PrjClearNegativePathCache(IntPtr namespaceVirtualizationContext, out uint totalEntryNumber);
 
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/nf-projectedfslib-prjcompletecommand
         [LibraryImport("ProjectedFSLib.dll")]
-        internal static partial HResult PrjCompleteCommand(IntPtr namespaceVirtualizationContext, int commandId, HResult completionResult, [Optional] in PRJ_COMPLETE_COMMAND_EXTENDED_PARAMETERS extendedParameters);
+        internal static partial HResult PrjCompleteCommand(IntPtr namespaceVirtualizationContext, int commandId, HResult completionResult, [Optional] in PRJ_COMPLETE_COMMAND_EXTENDED_PARAMETERS_ENUMERATION extendedParameters);
+
+        // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/nf-projectedfslib-prjcompletecommand
+        [LibraryImport("ProjectedFSLib.dll")]
+        internal static partial HResult PrjCompleteCommand(IntPtr namespaceVirtualizationContext, int commandId, HResult completionResult, [Optional] in PRJ_COMPLETE_COMMAND_EXTENDED_PARAMETERS_NOTIFICATION extendedParameters);
+
+        // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/nf-projectedfslib-prjcompletecommand
+        [LibraryImport("ProjectedFSLib.dll")]
+        internal static partial HResult PrjCompleteCommand(IntPtr namespaceVirtualizationContext, int commandId, HResult completionResult, [Optional] IntPtr extendedParameters);
 
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/nf-projectedfslib-prjdeletefile
         [LibraryImport("ProjectedFSLib.dll")]
@@ -57,7 +65,7 @@ namespace ProjFS.Native
 
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/nf-projectedfslib-prjmarkdirectoryasplaceholder
         [LibraryImport("ProjectedFSLib.dll")]
-        internal static partial HResult PrjMarkDirectoryAsPlaceholder([MarshalAs(UnmanagedType.LPWStr)] string rootPathName, [MarshalAs(UnmanagedType.LPWStr)] string? targetPathName, [Optional, MarshalUsing(typeof(PrjPlaceholderVersionInfoMarshaller))] in PRJ_PLACEHOLDER_VERSION_INFO versionInfo, ref Guid virtualizationInstanceID);
+        internal static partial HResult PrjMarkDirectoryAsPlaceholder([MarshalAs(UnmanagedType.LPWStr)] string rootPathName, [MarshalAs(UnmanagedType.LPWStr)] string? targetPathName, [Optional, MarshalUsing(typeof(PrjPlaceholderVersionInfoMarshaller))] in PRJ_PLACEHOLDER_VERSION_INFO versionInfo, in Guid virtualizationInstanceID);
 
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/nf-projectedfslib-prjmarkdirectoryasplaceholder
         [LibraryImport("ProjectedFSLib.dll")]
@@ -69,7 +77,7 @@ namespace ProjFS.Native
 
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/nf-projectedfslib-prjstartvirtualizing
         [LibraryImport("ProjectedFSLib.dll")]
-        internal static partial HResult PrjStartVirtualizing([MarshalAs(UnmanagedType.LPWStr)] string virtualizationRootPath, ref PRJ_CALLBACKS callbacks, [Optional] IntPtr instanceContext, [Optional] in PRJ_STARTVIRTUALIZING_OPTIONS options, out IntPtr namespaceVirtualizationContext);
+        internal static partial HResult PrjStartVirtualizing([MarshalAs(UnmanagedType.LPWStr)] string virtualizationRootPath, ref PRJ_CALLBACKS callbacks, [Optional] IntPtr instanceContext, [Optional, MarshalUsing(typeof(PrjStartVirtualizingMarshaller))] in PRJ_STARTVIRTUALIZING_OPTIONS options, out IntPtr namespaceVirtualizationContext);
 
         [LibraryImport("ProjectedFSLib.dll")]
         internal static partial HResult MyMethod([MarshalAs(UnmanagedType.LPArray)] int[] ints);
@@ -88,7 +96,7 @@ namespace ProjFS.Native
 
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/nf-projectedfslib-prjwritefiledata
         [LibraryImport("ProjectedFSLib.dll")]
-        internal static partial HResult PrjWriteFileData(IntPtr namespaceVirtualizationContext, ref Guid dataStreamId, IntPtr buffer, ulong byteOffset, uint length);
+        internal static unsafe partial HResult PrjWriteFileData(IntPtr namespaceVirtualizationContext, in Guid dataStreamId, void* buffer, ulong byteOffset, uint length);
 
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/nf-projectedfslib-prjwriteplaceholderinfo
         [LibraryImport("ProjectedFSLib.dll")]

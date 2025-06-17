@@ -3,6 +3,7 @@
     internal static partial class ProjectedFSLib
     {
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/ne-projectedfslib-prj_callback_data_flags
+        [Flags]
         internal enum PRJ_CALLBACK_DATA_FLAGS
         {
             PRJ_CB_DATA_FLAG_ENUM_RESTART_SCAN = 0x00000001,

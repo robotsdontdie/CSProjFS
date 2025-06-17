@@ -1,13 +1,16 @@
 ﻿using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
-using ProjFS.Native;
+using ProjFS;
 using static ProjFS.Native.ProjectedFSLib;
 
 namespace ProjFS
 {
     public class VirtualizationInstance
     {
+        private const int IdLength = (int)PRJ_PLACEHOLDER_ID.PRJ_PLACEHOLDER_ID_LENGTH;
+
         private static readonly ConcurrentDictionary<int, VirtualizationInstance> instances = [];
         private static readonly Random random = new();
 
@@ -22,6 +25,7 @@ namespace ProjFS
         private Guid virtualizationInstanceId = default;
 
         private IRequiredCallbacks? requiredCallbacks = null;
+        private nint virtualizationContext;
 
         public VirtualizationInstance(
             string virtualizationRootPath,
@@ -52,7 +56,7 @@ namespace ProjFS
             if (markAsRoot)
             {
                 var versionInfo = new PRJ_PLACEHOLDER_VERSION_INFO();
-                ProjectedFSLib.PrjMarkDirectoryAsPlaceholder(virtualizationRootPath, null, versionInfo, ref virtualizationInstanceID);
+                PrjMarkDirectoryAsPlaceholder(virtualizationRootPath, null, versionInfo, virtualizationInstanceID);
             }
         }
 
@@ -212,6 +216,16 @@ namespace ProjFS
         /// <summary>Retrieves the <see cref="IRequiredCallbacks"/> interface.</summary>
         public IRequiredCallbacks? RequiredCallbacks => requiredCallbacks;
 
+        public Guid VirtualizationInstanceId
+        {
+            get
+            {
+                ConfirmStarted();
+                return virtualizationInstanceId;
+            }
+        }
+
+        public int PlaceholderIdLength => IdLength;
 
         public HResult StartVirtualizing(IRequiredCallbacks requiredCallbacks)
         {
@@ -228,162 +242,785 @@ namespace ProjFS
             } while (instanceContext != 0 && instances.TryAdd(instanceContext, this));
 
             var callbacks = new PRJ_CALLBACKS();
-            var startOptions = new PRJ_STARTVIRTUALIZING_OPTIONS();
 
             unsafe
             {
-                var unmanagedStrings = new List<IntPtr>();
-                IntPtr unmanagedMappingArray = default;
+                callbacks.StartDirectoryEnumerationCallback = &StartDirectoryEnumerationCallback;
+                callbacks.GetDirectoryEnumerationCallback = &GetDirectoryEnumerationCallback;
+                callbacks.EndDirectoryEnumerationCallback = &EndDirectoryEnumerationCallback;
+                callbacks.GetPlaceholderInfoCallback = &GetPlaceholderInfoCallback;
+                callbacks.GetFileDataCallback = &GetFileDataCallback;
 
-                try
+                if (OnQueryFileName is not null)
                 {
-                    callbacks.StartDirectoryEnumerationCallback = &StartDirectoryEnumerationCallback;
-                    callbacks.GetDirectoryEnumerationCallback = &GetDirectoryEnumerationCallback;
-                    callbacks.EndDirectoryEnumerationCallback = &EndDirectoryEnumerationCallback;
-                    callbacks.GetPlaceholderInfoCallback = &GetPlaceholderInfoCallback;
-                    callbacks.GetFileDataCallback = &GetFileDataCallback;
-
-                    if (OnQueryFileName is not null)
-                    {
-                        callbacks.QueryFileNameCallback = &QueryFileNameCallback;
-                    }
-
-                    if (OnCancelCommand is not null)
-                    {
-                        callbacks.CancelCommandCallback = &CancelCommandCallback;
-                    }
-
-                    if (OnNotifyFileOpened is not null
-                        || OnNotifyNewFileCreated is not null
-                        || OnNotifyFileOverwritten is not null
-                        || OnNotifyPreDelete is not null
-                        || OnNotifyPreRename is not null
-                        || OnNotifyPreCreateHardlink is not null
-                        || OnNotifyFileRenamed is not null
-                        || OnNotifyHardlinkCreated is not null
-                        || OnNotifyFileHandleClosedNoModification is not null
-                        || OnNotifyFileHandleClosedFileModifiedOrDeleted is not null
-                        || OnNotifyFilePreConvertToFull is not null)
-                    {
-                        callbacks.NotificationCallback = &NotificationCallback;
-                    }
-
-                    startOptions = new PRJ_STARTVIRTUALIZING_OPTIONS
-                    {
-                        Flags = enableNegativePathCache ? PRJ_STARTVIRTUALIZING_FLAGS.PRJ_FLAG_USE_NEGATIVE_PATH_CACHE : PRJ_STARTVIRTUALIZING_FLAGS.PRJ_FLAG_NONE,
-                        PoolThreadCount = poolThreadCount,
-                        ConcurrentThreadCount = concurrentThreadCount,
-                    };
-
-                    if (notificationMappings.Count > 0)
-                    {
-                        // allocate at least 1 byte so we get an actual pointer
-                        int enumSize = sizeof(PRJ_NOTIFY_TYPES);
-                        int stringSize = sizeof(IntPtr);
-                        int arraySize = checked((enumSize + stringSize) * notificationMappings.Count);
-                        unmanagedMappingArray = Marshal.AllocCoTaskMem(arraySize);
-                        var offset = 0;
-
-                        foreach (var mapping in notificationMappings)
-                        {
-                            Marshal.WriteInt32(unmanagedMappingArray, offset, (int)mapping.NotificationMask);
-                            offset += enumSize;
-
-                            var unmanagedString = (IntPtr)Utf16StringMarshaller.ConvertToUnmanaged(mapping.NotificationRoot ?? "");
-                            unmanagedStrings.Add(unmanagedString);
-                            Marshal.WriteIntPtr(unmanagedMappingArray, offset, unmanagedString);
-                            offset += stringSize;
-                        }
-
-                        startOptions.NotificationMappings = unmanagedMappingArray;
-                        startOptions.NotificationMappingsCount = (uint)notificationMappings.Count;
-                    }
-                    else
-                    {
-                        startOptions.NotificationMappingsCount = 0;
-                    }
-
-                    var result = PrjStartVirtualizing(virtualizationRootPath, ref callbacks, instanceContext, startOptions, out IntPtr namespaceVirtualizationContext);
-
-                    if (result != HResult.Ok)
-                    {
-                        return result;
-                    }
-
-                    result = PrjGetVirtualizationInstanceInfo(instanceContext, out var virtualizationInstanceInfo);
-                    if (result != HResult.Ok)
-                    {
-                        StopVirtualizing();
-                        return result;
-                    }
-
-                    virtualizationInstanceId = virtualizationInstanceInfo.InstanceID;
-
-                    return HResult.Ok;
+                    callbacks.QueryFileNameCallback = &QueryFileNameCallback;
                 }
-                finally
-                {
-                    foreach (var str in unmanagedStrings)
-                    {
-                        Utf16StringMarshaller.Free((ushort*)str);
-                    }
 
-                    if(unmanagedMappingArray != default)
-                    {
-                        Marshal.FreeCoTaskMem(unmanagedMappingArray);
-                    }
+                if (OnCancelCommand is not null)
+                {
+                    callbacks.CancelCommandCallback = &CancelCommandCallback;
+                }
+
+                if (OnNotifyFileOpened is not null
+                    || OnNotifyNewFileCreated is not null
+                    || OnNotifyFileOverwritten is not null
+                    || OnNotifyPreDelete is not null
+                    || OnNotifyPreRename is not null
+                    || OnNotifyPreCreateHardlink is not null
+                    || OnNotifyFileRenamed is not null
+                    || OnNotifyHardlinkCreated is not null
+                    || OnNotifyFileHandleClosedNoModification is not null
+                    || OnNotifyFileHandleClosedFileModifiedOrDeleted is not null
+                    || OnNotifyFilePreConvertToFull is not null)
+                {
+                    callbacks.NotificationCallback = &NotificationCallback;
                 }
             }
+
+            var startOptions = new PRJ_STARTVIRTUALIZING_OPTIONS
+            {
+                Flags = enableNegativePathCache ? PRJ_STARTVIRTUALIZING_FLAGS.PRJ_FLAG_USE_NEGATIVE_PATH_CACHE : PRJ_STARTVIRTUALIZING_FLAGS.PRJ_FLAG_NONE,
+                PoolThreadCount = poolThreadCount,
+                ConcurrentThreadCount = concurrentThreadCount,
+            };
+
+            if (notificationMappings.Count > 0)
+            {
+                startOptions.NotificationMappings = notificationMappings
+                    .Select(m => new PRJ_NOTIFICATION_MAPPING
+                    {
+                        NotificationBitMask = (PRJ_NOTIFY_TYPES)m.NotificationMask,
+                        NotificationRoot = m.NotificationRoot,
+                    }).ToArray();
+                startOptions.NotificationMappingsCount = (uint)notificationMappings.Count;
+            }
+
+            var result = PrjStartVirtualizing(virtualizationRootPath, ref callbacks, instanceContext, startOptions, out virtualizationContext);
+
+            if (result != HResult.Ok)
+            {
+                return result;
+            }
+
+            result = PrjGetVirtualizationInstanceInfo(virtualizationContext, out var virtualizationInstanceInfo);
+            if (result != HResult.Ok)
+            {
+                StopVirtualizing();
+                return result;
+            }
+
+            virtualizationInstanceId = virtualizationInstanceInfo.InstanceID;
+
+            return HResult.Ok;
         }
 
         public void StopVirtualizing()
         {
-            if (instanceContext == 0)
+            if (virtualizationContext == 0)
             {
                 return;
             }
 
-            PrjStopVirtualizing(instanceContext);
+            PrjStopVirtualizing(virtualizationContext);
         }
 
-        private static HResult StartDirectoryEnumerationCallback(ref PRJ_CALLBACK_DATA callbackData, ref Guid guid)
+        public HResult ClearNegativePathCache(out uint totalEntryNumber)
         {
-            return HResult.Ok;
+            HResult result = PrjClearNegativePathCache(virtualizationContext, out totalEntryNumber);
+            return result;
         }
 
-        private static unsafe HResult GetDirectoryEnumerationCallback(ref PRJ_CALLBACK_DATA callbackData, ref Guid guid, ushort* searchString, IntPtr something)
+        public HResult WriteFileData(
+            Guid dataStreamId,
+            IWriteBuffer buffer,
+            ulong byteOffset,
+            uint length)
         {
-            return HResult.Ok;
+            if (buffer is null)
+            {
+                return HResult.InvalidArg;
+            }
+
+            unsafe
+            {
+                return PrjWriteFileData(virtualizationContext,
+                    dataStreamId,
+                    buffer.Pointer.ToPointer(),
+                    byteOffset,
+                    length);
+            }
         }
 
-        private static HResult EndDirectoryEnumerationCallback(ref PRJ_CALLBACK_DATA callbackData, ref Guid guid)
+        public HResult DeleteFile(
+            string relativePath,
+            UpdateType updateFlags,
+            out UpdateFailureCause failureReason)
         {
-            return HResult.Ok;
+            PRJ_UPDATE_FAILURE_CAUSES deleteFailureReason = PRJ_UPDATE_FAILURE_CAUSES.PRJ_UPDATE_FAILURE_CAUSE_NONE;
+            HResult result = PrjDeleteFile(
+                virtualizationContext,
+                relativePath,
+                (PRJ_UPDATE_TYPES)updateFlags,
+                out deleteFailureReason);
+
+            failureReason = (UpdateFailureCause)deleteFailureReason;
+            return result;
+        }
+
+        public HResult WritePlaceholderInfo(
+            string relativePath,
+            DateTime creationTime,
+            DateTime lastAccessTime,
+            DateTime lastWriteTime,
+            DateTime changeTime,
+            FileAttributes fileAttributes,
+            long endOfFile,
+            bool isDirectory,
+            byte[] contentId,
+            byte[] providerId)
+        {
+            if (relativePath is null)
+            {
+                return HResult.InvalidArg;
+            }
+
+            var placeholderInfo = CreatePlaceholderInfo(
+                creationTime,
+                lastAccessTime,
+                lastWriteTime,
+                changeTime,
+                fileAttributes,
+                endOfFile,
+                isDirectory,
+                contentId,
+                providerId);
+
+            return PrjWritePlaceholderInfo(
+                    virtualizationContext,
+                    relativePath,
+                    placeholderInfo,
+                    (uint)placeholderInfo.Size);
+        }
+
+        public HResult WritePlaceholderInfo2(
+            string relativePath,
+            DateTime creationTime,
+            DateTime lastAccessTime,
+            DateTime lastWriteTime,
+            DateTime changeTime,
+            FileAttributes fileAttributes,
+            long endOfFile,
+            bool isDirectory,
+            string symlinkTargetOrNull,
+            byte[] contentId,
+            byte[] providerId)
+        {
+            if (relativePath is null)
+            {
+                return HResult.InvalidArg;
+            }
+
+            var placeholderInfo = CreatePlaceholderInfo(
+                creationTime,
+                lastAccessTime,
+                lastWriteTime,
+                changeTime,
+                fileAttributes,
+                endOfFile,
+                isDirectory,
+                contentId,
+                providerId);
+
+            if (symlinkTargetOrNull is null)
+            {
+                return PrjWritePlaceholderInfo(
+                    virtualizationContext,
+                    relativePath,
+                    placeholderInfo,
+                    (uint)placeholderInfo.Size);
+            }
+
+            var extendedInfo = new PRJ_EXTENDED_INFO
+            {
+                InfoType = PRJ_EXT_INFO_TYPE.PRJ_EXT_INFO_TYPE_SYMLINK,
+                TargetName = symlinkTargetOrNull,
+            };
+
+            return PrjWritePlaceholderInfo2(
+                virtualizationContext,
+                relativePath,
+                placeholderInfo,
+                (uint)placeholderInfo.Size,
+                extendedInfo);
+        }
+
+        public HResult UpdateFileIfNeeded(
+            string relativePath,
+            DateTime creationTime,
+            DateTime lastAccessTime,
+            DateTime lastWriteTime,
+            DateTime changeTime,
+            FileAttributes fileAttributes,
+            long endOfFile,
+            byte[] contentId,
+            byte[] providerId,
+            UpdateType updateFlags,
+            out UpdateFailureCause failureReason)
+        {
+            HResult result;
+            
+            var placeholderInfo = CreatePlaceholderInfo(creationTime,
+                lastAccessTime,
+                lastWriteTime,
+                changeTime,
+                fileAttributes,
+                endOfFile,
+                isDirectory: false,
+                contentId,
+                providerId);
+
+            var updateFailureCause = PRJ_UPDATE_FAILURE_CAUSES.PRJ_UPDATE_FAILURE_CAUSE_NONE;
+            result = PrjUpdateFileIfNeeded(
+                virtualizationContext,
+                relativePath,
+                placeholderInfo,
+                (uint)placeholderInfo.Size,
+                (PRJ_UPDATE_TYPES)updateFlags,
+                out updateFailureCause);
+
+            failureReason = (UpdateFailureCause)updateFailureCause;
+            return result;
+        }
+
+        public HResult CompleteCommand(int commandId)
+        {
+            return CompleteCommand(commandId, HResult.Ok);
+        }
+
+        public HResult CompleteCommand(
+            int commandId,
+            HResult completionResult)
+        {
+            return PrjCompleteCommand(
+                virtualizationContext,
+                commandId,
+                completionResult,
+                IntPtr.Zero);
+        }
+
+        public HResult CompleteCommand(
+            int commandId,
+            IDirectoryEnumerationResults results)
+        {
+            var extendedParams = new PRJ_COMPLETE_COMMAND_EXTENDED_PARAMETERS_ENUMERATION();
+
+            extendedParams.CommandType = PRJ_COMPLETE_COMMAND_TYPE.PRJ_COMPLETE_COMMAND_TYPE_ENUMERATION;
+            // results has to be a concrete DirectoryEnumerationResults.
+            extendedParams.DirEntryBufferHandle = results.DirEntryBufferHandle;
+
+            return PrjCompleteCommand(
+                virtualizationContext,
+                commandId,
+                HResult.Ok,
+                extendedParams);
+        }
+
+        public HResult CompleteCommand(
+            int commandId,
+            NotificationType newNotificationMask)
+        {
+            var extendedParams = new PRJ_COMPLETE_COMMAND_EXTENDED_PARAMETERS_NOTIFICATION();
+
+            extendedParams.CommandType = PRJ_COMPLETE_COMMAND_TYPE.PRJ_COMPLETE_COMMAND_TYPE_NOTIFICATION;
+            extendedParams.NotificationMask = (PRJ_NOTIFY_TYPES)newNotificationMask;
+
+            return PrjCompleteCommand(
+                virtualizationContext,
+                commandId,
+                HResult.Ok,
+                extendedParams);
+        }
+
+        public IWriteBuffer CreateWriteBuffer(uint desiredBufferSize)
+        {
+            return new WriteBuffer(desiredBufferSize, virtualizationContext);
+        }
+
+        public IWriteBuffer CreateWriteBuffer(
+            ulong byteOffset,
+            uint length,
+            out ulong alignedByteOffset,
+            out uint alignedLength)
+        {
+            // Get the sector size so we can compute the aligned versions of byteOffset and length to return
+            // to the user.  If we're on Windows 10 version 1803 the sector size is stored on the class.
+            // Otherwise it's available from the namespace virtualization context.
+            ulong bytesPerSector;
+
+            var instanceInfo = new PRJ_VIRTUALIZATION_INSTANCE_INFO();
+            var result = PrjGetVirtualizationInstanceInfo(virtualizationContext, out instanceInfo);
+
+            if (result != HResult.Ok)
+            {
+                throw new InvalidOperationException($"Failed to retrieve virtualization instance info for directory {virtualizationRootPath}.", Marshal.GetExceptionForHR((int)result));
+            }
+
+            bytesPerSector = instanceInfo.WriteAlignment;
+            
+            // alignedByteOffset is byteOffset, rounded down to the nearest bytesPerSector boundary.
+            alignedByteOffset = byteOffset & (0 - bytesPerSector);
+
+            // alignedLength is the end offset of the requested range, rounded up to the nearest bytesPerSector
+            // boundary.
+            ulong rangeEndOffset = byteOffset + length;
+            ulong alignedRangeEndOffset = (rangeEndOffset + (bytesPerSector - 1)) & (0 - bytesPerSector);
+            alignedLength = (uint)(alignedRangeEndOffset - alignedByteOffset);
+
+            // Now that we've got the adjusted length, create the buffer itself.
+            return CreateWriteBuffer(alignedLength);
+        }
+
+        public HResult MarkDirectoryAsPlaceholder(
+            string targetDirectoryPath,
+            byte[] contentId,
+            byte[] providerId)
+        {
+            HResult hr = PrjGetVirtualizationInstanceInfo(virtualizationContext, out var instanceInfo);
+
+            if (hr == HResult.Ok)
+            {
+                var versionInfo = new PRJ_PLACEHOLDER_VERSION_INFO
+                {
+                    ProviderID = providerId,
+                    ContentID = contentId,
+                };
+
+                hr = PrjMarkDirectoryAsPlaceholder(
+                    virtualizationRootPath,
+                    targetDirectoryPath,
+                    versionInfo,
+                    instanceInfo.InstanceID);
+            }
+
+            return hr;
+        }
+
+        public static HResult MarkDirectoryAsVirtualizationRoot(
+            string rootPath,
+            Guid virtualizationInstanceGuid)
+        {
+            var versionInfo = new PRJ_PLACEHOLDER_VERSION_INFO();
+            return PrjMarkDirectoryAsPlaceholder(
+                rootPath,
+                null,
+                versionInfo,
+                virtualizationInstanceGuid);
+            
+        }
+        
+        // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/nc-projectedfslib-prj_start_directory_enumeration_cb
+        private static HResult StartDirectoryEnumerationCallback(ref PRJ_CALLBACK_DATA callbackData, ref Guid enumerationId)
+        {
+            if (!TryGetInstanceCallbacks(callbackData, out _, out var callbacks))
+            {
+                return HResult.InternalError;
+            }
+
+            unsafe
+            {
+                string? filePathName = Utf16StringMarshaller.ConvertToManaged(callbackData.FilePathName);
+                if (filePathName is null)
+                {
+                    return HResult.InvalidArg;
+                }
+
+                string? triggeringProcessFilename = Utf16StringMarshaller.ConvertToManaged(callbackData.TriggeringProcessImageFileName);
+
+                return callbacks.StartDirectoryEnumerationCallback(
+                    callbackData.CommandId,
+                    enumerationId,
+                    filePathName,
+                    callbackData.TriggeringProcessId,
+                    triggeringProcessFilename);
+            }
+        }
+
+        // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/nc-projectedfslib-prj_get_directory_enumeration_cb
+        private static unsafe HResult GetDirectoryEnumerationCallback(ref PRJ_CALLBACK_DATA callbackData, ref Guid enumerationId, ushort* searchString, IntPtr dirEntryBufferHandle)
+        {
+
+            if (!TryGetInstanceCallbacks(callbackData, out _, out var callbacks))
+            {
+                return HResult.InternalError;
+            }
+
+            unsafe
+            {
+                string? managedSearchString = Utf16StringMarshaller.ConvertToManaged(searchString);
+
+                return callbacks.GetDirectoryEnumerationCallback(
+                    callbackData.CommandId,
+                    enumerationId,
+                    managedSearchString,
+                    callbackData.Flags.HasFlag(PRJ_CALLBACK_DATA_FLAGS.PRJ_CB_DATA_FLAG_ENUM_RESTART_SCAN),
+                    new DirectoryEnumerationResults(dirEntryBufferHandle));
+            }
+        }
+
+        // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/nc-projectedfslib-prj_end_directory_enumeration_cb
+        private static HResult EndDirectoryEnumerationCallback(ref PRJ_CALLBACK_DATA callbackData, ref Guid enumerationId)
+        {
+            if (!TryGetInstanceCallbacks(callbackData, out _, out var callbacks))
+            {
+                return HResult.InternalError;
+            }
+
+            return callbacks.EndDirectoryEnumerationCallback(enumerationId);
         }
 
         private static HResult GetPlaceholderInfoCallback(ref PRJ_CALLBACK_DATA callbackData)
         {
-            return HResult.Ok;
+            if (!TryGetInstanceCallbacks(callbackData, out _, out var callbacks))
+            {
+                return HResult.InternalError;
+            }
+
+            unsafe
+            {
+                string? filePathName = Utf16StringMarshaller.ConvertToManaged(callbackData.FilePathName);
+                if (filePathName is null)
+                {
+                    return HResult.InvalidArg;
+                }
+
+                string? triggeringProcessFilename = Utf16StringMarshaller.ConvertToManaged(callbackData.TriggeringProcessImageFileName);
+
+                return callbacks.GetPlaceholderInfoCallback(
+                    callbackData.CommandId,
+                    filePathName,
+                    callbackData.TriggeringProcessId,
+                    triggeringProcessFilename);
+            }
         }
 
-        private static HResult GetFileDataCallback(ref PRJ_CALLBACK_DATA callbackData, ulong someLong, uint someInt)
+        private static HResult GetFileDataCallback(ref PRJ_CALLBACK_DATA callbackData, ulong byteOffset, uint length)
         {
-            return HResult.Ok;
+            if (!TryGetInstanceCallbacks(callbackData, out _, out var callbacks))
+            {
+                return HResult.InternalError;
+            }
+
+            unsafe
+            {
+                string? filePathName = Utf16StringMarshaller.ConvertToManaged(callbackData.FilePathName);
+                if (filePathName is null)
+                {
+                    return HResult.InvalidArg;
+                }
+
+                string? triggeringProcessFilename = Utf16StringMarshaller.ConvertToManaged(callbackData.TriggeringProcessImageFileName);
+
+                var providerId = new byte[IdLength];
+                Marshal.Copy(callbackData.VersionInfo, providerId, 0, IdLength);
+
+                var contentId = new byte[IdLength];
+                Marshal.Copy(callbackData.VersionInfo + IdLength, contentId, 0, IdLength);
+
+
+
+                return callbacks.GetFileDataCallback(
+                    callbackData.CommandId,
+                    filePathName,
+                    byteOffset,
+                    length,
+                    callbackData.DataStreamId,
+                    contentId,
+                    providerId,
+                    callbackData.TriggeringProcessId,
+                    triggeringProcessFilename);
+            }
         }
 
         private static HResult QueryFileNameCallback(ref PRJ_CALLBACK_DATA callbackData)
         {
-            return HResult.Ok;
+            if (!TryGetInstanceCallbacks(callbackData, out var instance, out _))
+            {
+                return HResult.InternalError;
+            }
+
+            if (instance.OnQueryFileName is not QueryFileNameCallback callback)
+            {
+                return HResult.InternalError;
+            }
+
+            unsafe
+            {
+                string? filePathName = Utf16StringMarshaller.ConvertToManaged(callbackData.FilePathName);
+                if (filePathName is null)
+                {
+                    return HResult.InvalidArg;
+                }
+
+                return callback(filePathName);
+            }
         }
 
         private static void CancelCommandCallback(ref PRJ_CALLBACK_DATA callbackData)
         {
-            
+            if (!TryGetInstanceCallbacks(callbackData, out var instance, out _))
+            {
+                return;
+            }
+
+            if (instance.OnCancelCommand is not CancelCommandCallback callback)
+            {
+                return;
+            }
+
+            callback(callbackData.CommandId);
         }
 
-        private static unsafe HResult NotificationCallback(ref PRJ_CALLBACK_DATA callbackData, int isDirectory, PRJ_NOTIFICATION notification, ushort* destinationFileName, PRJ_NOTIFICATION_PARAMETERS* operationParameters)
+        private static unsafe HResult NotificationCallback(ref PRJ_CALLBACK_DATA callbackData, int isDirectory, PRJ_NOTIFICATION notification, ushort* destinationFileName, PRJ_NOTIFICATION_PARAMETERS* notificationParameters)
         {
-            return HResult.Ok;
+            if (!TryGetInstanceCallbacks(callbackData, out var instance, out _))
+            {
+                return HResult.InternalError;
+            }
+
+            string? filePathName = Utf16StringMarshaller.ConvertToManaged(callbackData.FilePathName);
+            if (filePathName is null)
+            {
+                return HResult.InvalidArg;
+            }
+
+            string? destinationPath = Utf16StringMarshaller.ConvertToManaged(destinationFileName);
+
+            string? triggeringProcessFilename = Utf16StringMarshaller.ConvertToManaged(callbackData.TriggeringProcessImageFileName);
+
+            var result = HResult.Ok;
+            NotificationType notificationMask = 0;
+            bool? allow = null;
+
+            switch (notification)
+            {
+                case PRJ_NOTIFICATION.PRJ_NOTIFICATION_FILE_OPENED:
+                    allow = instance.OnNotifyFileOpened?.Invoke(
+                        filePathName,
+                        isDirectory != 0,
+                        callbackData.TriggeringProcessId,
+                        triggeringProcessFilename,
+                        out notificationMask);
+
+                    if (allow.HasValue)
+                    {
+                        if (allow.Value)
+                        {
+                            notificationParameters->Data = (uint)notificationMask;
+                        }
+                        else
+                        {
+                            result = HResult.AccessDenied;
+                        }
+                    }
+
+                    break;
+                case PRJ_NOTIFICATION.PRJ_NOTIFICATION_NEW_FILE_CREATED:
+                    instance.OnNotifyNewFileCreated?.Invoke(
+                        filePathName,
+                        isDirectory != 0,
+                        callbackData.TriggeringProcessId,
+                        triggeringProcessFilename,
+                        out notificationMask);
+                    notificationParameters->Data = (uint)notificationMask;
+                    break;
+                case PRJ_NOTIFICATION.PRJ_NOTIFICATION_FILE_OVERWRITTEN:
+                    instance.OnNotifyFileOverwritten?.Invoke(
+                        filePathName,
+                        isDirectory != 0,
+                        callbackData.TriggeringProcessId,
+                        triggeringProcessFilename,
+                        out notificationMask);
+                    notificationParameters->Data = (uint)notificationMask;
+                    break;
+                case PRJ_NOTIFICATION.PRJ_NOTIFICATION_PRE_DELETE:
+                    allow = instance.OnNotifyPreDelete?.Invoke(
+                        filePathName,
+                        isDirectory != 0,
+                        callbackData.TriggeringProcessId,
+                        triggeringProcessFilename);
+                    if (allow.HasValue && !allow.Value)
+                    {
+                        result = HResult.CannotDelete;
+                    }
+                    break;
+                case PRJ_NOTIFICATION.PRJ_NOTIFICATION_PRE_RENAME:
+                    if (destinationPath is null)
+                    {
+                        return HResult.InvalidArg;
+                    }
+
+                    allow = instance.OnNotifyPreRename?.Invoke(
+                        filePathName,
+                        destinationPath,
+                        callbackData.TriggeringProcessId,
+                        triggeringProcessFilename);
+                    if (allow.HasValue && !allow.Value)
+                    {
+                        result = HResult.AccessDenied;
+                    }
+                    break;
+                case PRJ_NOTIFICATION.PRJ_NOTIFICATION_PRE_SET_HARDLINK:
+                    if (destinationPath is null)
+                    {
+                        return HResult.InvalidArg;
+                    }
+
+                    allow = instance.OnNotifyPreCreateHardlink?.Invoke(
+                        filePathName,
+                        destinationPath,
+                        callbackData.TriggeringProcessId,
+                        triggeringProcessFilename);
+                    if (allow.HasValue && !allow.Value)
+                    {
+                        result = HResult.AccessDenied;
+                    }
+                    break;
+                case PRJ_NOTIFICATION.PRJ_NOTIFICATION_FILE_RENAMED:
+                    if (destinationPath is null)
+                    {
+                        return HResult.InvalidArg;
+                    }
+
+                    instance.OnNotifyFileRenamed?.Invoke(
+                        filePathName,
+                        destinationPath,
+                        isDirectory != 0,
+                        callbackData.TriggeringProcessId,
+                        triggeringProcessFilename,
+                        out notificationMask);
+                    notificationParameters->Data = (uint)notificationMask;
+                    break;
+                case PRJ_NOTIFICATION.PRJ_NOTIFICATION_HARDLINK_CREATED:
+                    if (destinationPath is null)
+                    {
+                        return HResult.InvalidArg;
+                    }
+
+                    instance.OnNotifyHardlinkCreated?.Invoke(
+                        filePathName,
+                        destinationPath,
+                        callbackData.TriggeringProcessId,
+                        triggeringProcessFilename);
+                    break;
+                case PRJ_NOTIFICATION.PRJ_NOTIFICATION_FILE_HANDLE_CLOSED_NO_MODIFICATION:
+                    instance.OnNotifyFileHandleClosedNoModification?.Invoke(
+                        filePathName,
+                        isDirectory != 0,
+                        callbackData.TriggeringProcessId,
+                        triggeringProcessFilename);
+                    break;
+                case PRJ_NOTIFICATION.PRJ_NOTIFICATION_FILE_HANDLE_CLOSED_FILE_MODIFIED:
+                    instance.OnNotifyFileHandleClosedFileModifiedOrDeleted?.Invoke(
+                        filePathName,
+                        isDirectory != 0,
+                        isFileModified: true,
+                        isFileDeleted: false,
+                        callbackData.TriggeringProcessId,
+                        triggeringProcessFilename);
+                    break;
+                case PRJ_NOTIFICATION.PRJ_NOTIFICATION_FILE_HANDLE_CLOSED_FILE_DELETED:
+                    instance.OnNotifyFileHandleClosedFileModifiedOrDeleted?.Invoke(
+                        filePathName,
+                        isDirectory != 0,
+                        isFileModified: notificationParameters->Data != 0,
+                        isFileDeleted: true,
+                        callbackData.TriggeringProcessId,
+                        triggeringProcessFilename);
+                    break;
+                case PRJ_NOTIFICATION.PRJ_NOTIFICATION_FILE_PRE_CONVERT_TO_FULL:
+                    allow = instance.OnNotifyFilePreConvertToFull?.Invoke(
+                        filePathName,
+                        callbackData.TriggeringProcessId,
+                        triggeringProcessFilename);
+                    if (allow.HasValue && !allow.Value)
+                    {
+                        result = HResult.AccessDenied;
+                    }
+                    break;
+                default:
+                    break;
+            }
+
+            return result;
+        }
+
+        private static bool TryGetInstanceCallbacks(
+            PRJ_CALLBACK_DATA callbackData,
+            [NotNullWhen(true)] out VirtualizationInstance? virtualizationInstance,
+            [NotNullWhen(true)] out IRequiredCallbacks? callbacks)
+        {
+            int instanceContext = (int)callbackData.InstanceContext;
+            if (!instances.TryGetValue(instanceContext, out virtualizationInstance))
+            {
+                callbacks = null;
+                return false;
+            }
+
+            callbacks = virtualizationInstance.RequiredCallbacks;
+            return callbacks is not null;
+        }
+
+        private static PRJ_PLACEHOLDER_INFO CreatePlaceholderInfo(
+            DateTime creationTime,
+            DateTime lastAccessTime,
+            DateTime lastWriteTime,
+            DateTime changeTime,
+            FileAttributes fileAttributes,
+            long endOfFile,
+            bool isDirectory,
+            byte[] contentId,
+            byte[] providerId)
+        {
+            return new PRJ_PLACEHOLDER_INFO
+            {
+                FileBasicInfo = new PRJ_FILE_BASIC_INFO
+                {
+                    FileSize = isDirectory ? 0 : endOfFile,
+                    IsDirectory = isDirectory,
+                    FileAttributes = (uint)fileAttributes,
+                    CreationTime = creationTime.ToFileTime(),
+                    LastAccessTime = lastAccessTime.ToFileTime(),
+                    LastWriteTime = lastWriteTime.ToFileTime(),
+                    ChangeTime = changeTime.ToFileTime(),
+                },
+                EaBufferSize = 0,
+                OffsetToFirstEa = 0,
+                SecurityBufferSize = 0,
+                OffsetToSecurityDescriptor = 0,
+                StreamsInfoBufferSize = 0,
+                OffsetToFirstStreamInfo = 0,
+                VersionInfo = new PRJ_PLACEHOLDER_VERSION_INFO
+                {
+                    ContentID = contentId,
+                    ProviderID = providerId,
+                },
+            };
+        }
+
+        private void ConfirmStarted()
+        {
+            if (virtualizationContext == 0)
+            {
+                throw new InvalidOperationException("Operation invalid before virtualization instance is started");
+            }
+        }
+
+        private void ConfirmNotStarted()
+        {
+            if (virtualizationContext != 0)
+            {
+                throw new InvalidOperationException("Operation invalid after virtualization instance is started");
+            }
         }
     }
 }

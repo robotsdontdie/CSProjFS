@@ -1,6 +1,4 @@
-﻿using System.Runtime.InteropServices;
-
-namespace ProjFS
+﻿namespace ProjFS
 {
     //
     // Summary:
@@ -12,6 +10,8 @@ namespace ProjFS
     //     interface to ProjFS.
     public interface IDirectoryEnumerationResults
     {
+        IntPtr DirEntryBufferHandle { get; }
+
         //
         // Summary:
         //     When overridden in a derived class, adds one entry to a directory enumeration
