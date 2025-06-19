@@ -1,6 +1,6 @@
-﻿using static ProjFS.Native.ProjectedFSLib.PRJ_UPDATE_TYPES;
+﻿using static CSProjFS.Native.ProjectedFSLib.PRJ_UPDATE_TYPES;
 
-namespace ProjFS
+namespace CSProjFS
 {
     /// <summary>Defines values describing when to allow a virtualized file to be deleted or updated.</summary>
     /// <remarks>

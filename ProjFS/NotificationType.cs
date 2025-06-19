@@ -1,11 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using static ProjFS.Native.ProjectedFSLib;
+﻿using static CSProjFS.Native.ProjectedFSLib.PRJ_NOTIFY_TYPES;
 
-namespace ProjFS
+namespace CSProjFS
 {
     /// <summary>
     /// Defines values for file system operation notifications ProjFS can send to a provider.
@@ -74,70 +69,70 @@ namespace ProjFS
         /// <summary>
         /// Indicates that the provider does not want any notifications.  This value overrides all others.
         /// </summary>
-        None = PRJ_NOTIFY_TYPES.PRJ_NOTIFY_SUPPRESS_NOTIFICATIONS,
+        None = PRJ_NOTIFY_SUPPRESS_NOTIFICATIONS,
 
         /// <summary>
         /// Indicates that ProjFS should call the provider's <c>OnNotifyFileOpened</c> callback when a handle is created to an existing file or directory.
         /// </summary>
-        FileOpened = PRJ_NOTIFY_TYPES.PRJ_NOTIFY_FILE_OPENED,
+        FileOpened = PRJ_NOTIFY_FILE_OPENED,
 
         /// <summary>
         /// Indicates that ProjFS should call the provider's <c>OnNotifyNewFileCreated</c> callback when a new file or directory is created.
         /// </summary>
-        NewFileCreated = PRJ_NOTIFY_TYPES.PRJ_NOTIFY_NEW_FILE_CREATED,
+        NewFileCreated = PRJ_NOTIFY_NEW_FILE_CREATED,
 
         /// <summary>
         /// Indicates that ProjFS should call the provider's <c>OnNotifyFileOverwritten</c> callback when an existing file is superseded or overwritten.
         /// </summary>
-        FileOverwritten = PRJ_NOTIFY_TYPES.PRJ_NOTIFY_FILE_OVERWRITTEN,
+        FileOverwritten = PRJ_NOTIFY_FILE_OVERWRITTEN,
 
         /// <summary>
         /// Indicates that ProjFS should call the provider's <c>OnNotifyPreDelete</c> callback when a file or directory is about to be deleted.
         /// </summary>
-        PreDelete = PRJ_NOTIFY_TYPES.PRJ_NOTIFY_PRE_DELETE,
+        PreDelete = PRJ_NOTIFY_PRE_DELETE,
 
         /// <summary>
         /// Indicates that ProjFS should call the provider's <c>OnNotifyPreRename</c> callback when a file or directory is about to be renamed.
         /// </summary>
-        PreRename = PRJ_NOTIFY_TYPES.PRJ_NOTIFY_PRE_RENAME,
+        PreRename = PRJ_NOTIFY_PRE_RENAME,
 
         /// <summary>
         /// Indicates that ProjFS should call the provider's <c>OnNotifyPreCreateHardlink</c> callback when a hard link is about to be created for a file.
         /// </summary>
-        PreCreateHardlink = PRJ_NOTIFY_TYPES.PRJ_NOTIFY_PRE_SET_HARDLINK,
+        PreCreateHardlink = PRJ_NOTIFY_PRE_SET_HARDLINK,
 
         /// <summary>
         /// Indicates that ProjFS should call the provider's <c>OnNotifyFileRenamed</c> callback when a file or directory has been renamed.
         /// </summary>
-        FileRenamed = PRJ_NOTIFY_TYPES.PRJ_NOTIFY_FILE_RENAMED,
+        FileRenamed = PRJ_NOTIFY_FILE_RENAMED,
 
         /// <summary>
         /// Indicates that ProjFS should call the provider's <c>OnNotifyHardlinkCreated</c> callback when a hard link has been created for a file.
         /// </summary>
-        HardlinkCreated = PRJ_NOTIFY_TYPES.PRJ_NOTIFY_HARDLINK_CREATED,
+        HardlinkCreated = PRJ_NOTIFY_HARDLINK_CREATED,
 
         /// <summary>
         /// Indicates that ProjFS should call the provider's <c>OnNotifyFileHandleClosedNoModification</c> callback when a handle is closed on a file or directory
         /// and the closing handle neither modified nor deleted it.
         /// </summary>
-        FileHandleClosedNoModification = PRJ_NOTIFY_TYPES.PRJ_NOTIFY_FILE_HANDLE_CLOSED_NO_MODIFICATION,
+        FileHandleClosedNoModification = PRJ_NOTIFY_FILE_HANDLE_CLOSED_NO_MODIFICATION,
 
         /// <summary>
         /// Indicates that ProjFS should call the provider's <c>OnNotifyFileHandleClosedFileModifiedOrDeleted</c> callback when a handle is closed on a file or
         /// directory and the closing handle was used to modify it.
         /// </summary>
-        FileHandleClosedFileModified = PRJ_NOTIFY_TYPES.PRJ_NOTIFY_FILE_HANDLE_CLOSED_FILE_MODIFIED,
+        FileHandleClosedFileModified = PRJ_NOTIFY_FILE_HANDLE_CLOSED_FILE_MODIFIED,
 
         /// <summary>
         /// Indicates that ProjFS should call the provider's <c>OnNotifyFileHandleClosedFileModifiedOrDeleted</c> callback when a handle is closed on a file or
         /// directory and it is deleted as part of closing the handle.
         /// </summary>
-        FileHandleClosedFileDeleted = PRJ_NOTIFY_TYPES.PRJ_NOTIFY_FILE_HANDLE_CLOSED_FILE_DELETED,
+        FileHandleClosedFileDeleted = PRJ_NOTIFY_FILE_HANDLE_CLOSED_FILE_DELETED,
 
         /// <summary>
         /// Indicates that ProjFS should call the provider's <c>OnNotifyFilePreConvertToFull</c> callback when it is about to convert a placeholder to a full file.
         /// </summary>
-        FilePreConvertToFull = PRJ_NOTIFY_TYPES.PRJ_NOTIFY_FILE_PRE_CONVERT_TO_FULL,
+        FilePreConvertToFull = PRJ_NOTIFY_FILE_PRE_CONVERT_TO_FULL,
 
         /// <summary>
         /// This value is not used when calling the <c>VirtualizationInstance</c> constructor.  It
@@ -145,6 +140,6 @@ namespace ProjFS
         /// parameter, and indicates that the provider wants to continue to receive the notifications
         /// it registered for when starting the virtualization instance.
         /// </summary>
-        UseExistingMask = PRJ_NOTIFY_TYPES.PRJ_NOTIFY_USE_EXISTING_MASK
+        UseExistingMask = PRJ_NOTIFY_USE_EXISTING_MASK
     };
 }

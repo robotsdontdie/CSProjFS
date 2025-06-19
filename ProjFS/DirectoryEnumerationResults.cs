@@ -1,7 +1,7 @@
 ﻿
-using static ProjFS.Native.ProjectedFSLib;
+using static CSProjFS.Native.ProjectedFSLib;
 
-namespace ProjFS
+namespace CSProjFS
 {
     public class DirectoryEnumerationResults : IDirectoryEnumerationResults
     {

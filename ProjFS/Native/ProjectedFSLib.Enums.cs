@@ -1,4 +1,4 @@
-﻿namespace ProjFS.Native
+﻿namespace CSProjFS.Native
 {
     internal static partial class ProjectedFSLib
     {

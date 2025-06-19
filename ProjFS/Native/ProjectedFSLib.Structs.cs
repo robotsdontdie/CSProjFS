@@ -1,12 +1,12 @@
 ﻿using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
 
-namespace ProjFS.Native
+namespace CSProjFS.Native
 {
     internal static partial class ProjectedFSLib
     {
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/ns-projectedfslib-prj_callback_data
-        unsafe internal struct PRJ_CALLBACK_DATA
+        internal unsafe struct PRJ_CALLBACK_DATA_UNMANAGED
         {
             public uint Size;
             public PRJ_CALLBACK_DATA_FLAGS Flags;
@@ -15,23 +15,50 @@ namespace ProjFS.Native
             public Guid FileId;
             public Guid DataStreamId;
             public ushort* FilePathName;
-            public IntPtr VersionInfo; // PRJ_PLACEHOLDER_VERSION_INFO*
+            public IntPtr VersionInfo;
             public uint TriggeringProcessId;
             public ushort* TriggeringProcessImageFileName;
             public IntPtr InstanceContext;
         }
 
+        internal struct PRJ_CALLBACK_DATA
+        {
+            internal uint Size;
+            internal PRJ_CALLBACK_DATA_FLAGS Flags;
+            internal IntPtr NamespaceVirtualizationContext;
+            internal int CommandId;
+            internal Guid FileId;
+            internal Guid DataStreamId;
+            internal string FilePathName;
+            internal PRJ_PLACEHOLDER_VERSION_INFO? VersionInfo;
+            internal uint TriggeringProcessId;
+            internal string? TriggeringProcessImageFileName;
+            internal IntPtr InstanceContext;
+        }
+
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/ns-projectedfslib-prj_callbacks
         unsafe internal struct PRJ_CALLBACKS
         {
-            public delegate*<ref PRJ_CALLBACK_DATA, ref Guid, HResult> StartDirectoryEnumerationCallback;
-            public delegate*<ref PRJ_CALLBACK_DATA, ref Guid, HResult> EndDirectoryEnumerationCallback;
-            public delegate*<ref PRJ_CALLBACK_DATA, ref Guid, ushort*, IntPtr, HResult> GetDirectoryEnumerationCallback;
-            public delegate*<ref PRJ_CALLBACK_DATA, HResult> GetPlaceholderInfoCallback;
-            public delegate*<ref PRJ_CALLBACK_DATA, ulong, uint, HResult> GetFileDataCallback;
-            public delegate*<ref PRJ_CALLBACK_DATA, HResult> QueryFileNameCallback;
-            public delegate*<ref PRJ_CALLBACK_DATA, int, PRJ_NOTIFICATION, ushort*, PRJ_NOTIFICATION_PARAMETERS*, HResult> NotificationCallback;
-            public delegate*<ref PRJ_CALLBACK_DATA, void> CancelCommandCallback;
+            public delegate* unmanaged[Stdcall]<PRJ_CALLBACK_DATA_UNMANAGED*, Guid*, HResult> StartDirectoryEnumerationCallback;
+            public delegate* unmanaged[Stdcall]<PRJ_CALLBACK_DATA_UNMANAGED*, Guid*, HResult> EndDirectoryEnumerationCallback;
+            public delegate* unmanaged[Stdcall]<PRJ_CALLBACK_DATA_UNMANAGED*, Guid*, ushort*, IntPtr, HResult> GetDirectoryEnumerationCallback;
+            public delegate* unmanaged[Stdcall]<PRJ_CALLBACK_DATA_UNMANAGED*, HResult> GetPlaceholderInfoCallback;
+            public delegate* unmanaged[Stdcall]<PRJ_CALLBACK_DATA_UNMANAGED*, ulong, uint, HResult> GetFileDataCallback;
+            public delegate* unmanaged[Stdcall]<PRJ_CALLBACK_DATA_UNMANAGED*, HResult> QueryFileNameCallback;
+            public delegate* unmanaged[Stdcall]<PRJ_CALLBACK_DATA_UNMANAGED*, int, PRJ_NOTIFICATION, ushort*, PRJ_NOTIFICATION_PARAMETERS*, HResult> NotificationCallback;
+            public delegate* unmanaged[Stdcall]<PRJ_CALLBACK_DATA_UNMANAGED*, void> CancelCommandCallback;
+        }
+
+        internal struct PRJ_CALLBACKS_UNMANAGED
+        {
+            internal nint StartDirectoryEnumerationCallbackPtr;
+            internal nint EndDirectoryEnumerationCallbackPtr;
+            internal nint GetDirectoryEnumerationCallbackPtr;
+            internal nint GetPlaceholderInfoCallbackPtr;
+            internal nint GetFileDataCallbackPtr;
+            internal nint QueryFileNameCallbackPtr;
+            internal nint NotificationCallbackPtr;
+            internal nint CancelCommandCallbackPtr;
         }
 
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/ns-projectedfslib-prj_complete_command_extended_parameters
@@ -48,26 +75,29 @@ namespace ProjFS.Native
         }
 
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/ns-projectedfslib-prj_file_basic_info
-        [StructLayout(LayoutKind.Sequential)]
+        [StructLayout(LayoutKind.Explicit, Size = 52)]
         internal struct PRJ_FILE_BASIC_INFO
         {
-            public static int Size = 4 + 8 * 5 + 4;
-
-            public bool IsDirectory;
-            public long FileSize;
-            public long CreationTime;
-            public long LastAccessTime;
-            public long LastWriteTime;
-            public long ChangeTime;
-            public uint FileAttributes;
+            [FieldOffset(0)] public bool IsDirectory;
+            [FieldOffset(8)] public long FileSize;
+            [FieldOffset(16)] public long CreationTime;
+            [FieldOffset(24)] public long LastAccessTime;
+            [FieldOffset(32)] public long LastWriteTime;
+            [FieldOffset(40)] public long ChangeTime;
+            [FieldOffset(48)] public uint FileAttributes;
         }
 
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/ns-projectedfslib-prj_notification_mapping
-        [StructLayout(LayoutKind.Sequential)]
         internal struct PRJ_NOTIFICATION_MAPPING
         {
             public PRJ_NOTIFY_TYPES NotificationBitMask;
             public string? NotificationRoot;
+        }
+
+        internal unsafe struct PRJ_NOTIFICATION_MAPPING_UNMANAGED
+        {
+            public PRJ_NOTIFY_TYPES NotificationBitMask;
+            public ushort* NotificationRoot;
         }
 
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/ns-projectedfslib-prj_notification_parameters
@@ -76,87 +106,31 @@ namespace ProjFS.Native
             public uint Data;
         }
 
-        internal struct PRJ_NOTIFICATION_PARAMETERS_POSTCREATE
+        [StructLayout(LayoutKind.Explicit, Size = 344)]
+        internal struct PRJ_PLACEHOLDER_INFO_UNMANAGED
         {
+            [FieldOffset(0)] public PRJ_FILE_BASIC_INFO FileBasicInfo;
+            //EaInformation
+            [FieldOffset(56)] public uint EaBufferSize;
+            [FieldOffset(60)] public uint OffsetToFirstEa;
 
-            public PRJ_NOTIFY_TYPES NotificationMask;
-        }
+            //SecurityInformation
+            [FieldOffset(64)] public uint SecurityBufferSize;
+            [FieldOffset(68)] public uint OffsetToSecurityDescriptor;
 
-        internal struct PRJ_NOTIFICATION_PARAMETERS_FILERENAMED
-        {
-            public PRJ_NOTIFY_TYPES NotificationMask;
-        }
+            //StreamsInformation
+            [FieldOffset(72)] public uint StreamsInfoBufferSize;
+            [FieldOffset(76)] public uint OffsetToFirstStreamInfo;
 
-        internal struct PRJ_NOTIFICATION_PARAMETERS_FILEDELETEDONHANDLECLOSE
-        {
-            public bool IsFileModified;
-        }
-
-        [CustomMarshaller(typeof(PRJ_PLACEHOLDER_INFO), MarshalMode.ManagedToUnmanagedIn, typeof(PrjPlaceholderInfoMarshaller))]
-        internal static unsafe class PrjPlaceholderInfoMarshaller
-        {
-            private const int IdLength = (int)PRJ_PLACEHOLDER_ID.PRJ_PLACEHOLDER_ID_LENGTH;
-            private const int byteSize = 8;
-
-            internal struct PRJ_PLACEHOLDER_INFO_UNMANAGED
-            {
-                public PRJ_FILE_BASIC_INFO FileBasicInfo;
-                //EaInformation
-                public uint EaBufferSize;
-                public uint OffsetToFirstEa;
-
-                //SecurityInformation
-                public uint SecurityBufferSize;
-                public uint OffsetToSecurityDescriptor;
-
-                //StreamsInformation
-                public uint StreamsInfoBufferSize;
-                public uint OffsetToFirstStreamInfo;
-
-                public PrjPlaceholderVersionInfoMarshaller.PRJ_PLACEHOLDER_VERSION_INFO_UNMANGED VersionInfo;
-                public byte VariableData;
-            }
-
-            public static PRJ_PLACEHOLDER_INFO_UNMANAGED ConvertToUnmanaged(PRJ_PLACEHOLDER_INFO managed)
-            {
-                if (managed.EaBufferSize != 0
-                    || managed.SecurityBufferSize != 0
-                    || managed.StreamsInfoBufferSize != 0)
-                {
-                    throw new ArgumentException("Optional placeholder info not supported");
-                }
-
-                return new PRJ_PLACEHOLDER_INFO_UNMANAGED
-                {
-                    FileBasicInfo = managed.FileBasicInfo,
-                    EaBufferSize = managed.EaBufferSize,
-                    OffsetToFirstEa = managed.OffsetToFirstEa,
-                    SecurityBufferSize = managed.SecurityBufferSize,
-                    OffsetToSecurityDescriptor = managed.OffsetToSecurityDescriptor,
-                    StreamsInfoBufferSize = managed.StreamsInfoBufferSize,
-                    OffsetToFirstStreamInfo = managed.OffsetToFirstStreamInfo,
-                    VersionInfo = PrjPlaceholderVersionInfoMarshaller.ConvertToUnmanaged(managed.VersionInfo),
-                    VariableData = 0,
-                };
-            }
+            [FieldOffset(80)] public PRJ_PLACEHOLDER_VERSION_INFO_UNMANGED VersionInfo;
+            [FieldOffset(336)] public byte VariableData;
         }
 
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/ns-projectedfslib-prj_placeholder_info
         [StructLayout(LayoutKind.Sequential)]
         internal struct PRJ_PLACEHOLDER_INFO
         {
-            public int Size
-            {
-                get
-                {
-                    return PRJ_FILE_BASIC_INFO.Size
-                        + 8 // EA info
-                        + 8 // Security info
-                        + 8 // Streams info
-                        + (int)PRJ_PLACEHOLDER_ID.PRJ_PLACEHOLDER_ID_LENGTH * 2 // version info
-                        + 1; // we dont actually support variable data atm and just write the one byte in the struct
-                }
-            }
+            public const int Size = 344;
 
             public PRJ_FILE_BASIC_INFO FileBasicInfo;
             //EaInformation
@@ -175,34 +149,21 @@ namespace ProjFS.Native
             //public byte[] VariableData;
         }
 
-        [CustomMarshaller(typeof(PRJ_PLACEHOLDER_VERSION_INFO), MarshalMode.ManagedToUnmanagedIn, typeof(PrjPlaceholderVersionInfoMarshaller))]
-        internal static unsafe class PrjPlaceholderVersionInfoMarshaller
+        internal unsafe struct PRJ_PLACEHOLDER_VERSION_INFO_UNMANGED
         {
-            private const int IdLength = (int)PRJ_PLACEHOLDER_ID.PRJ_PLACEHOLDER_ID_LENGTH;
-
-            internal struct PRJ_PLACEHOLDER_VERSION_INFO_UNMANGED
-            {
-                public fixed byte ProviderID[IdLength];
-                public fixed byte ContentID[IdLength];
-            }
-
-            public static PRJ_PLACEHOLDER_VERSION_INFO_UNMANGED ConvertToUnmanaged(PRJ_PLACEHOLDER_VERSION_INFO managed)
-            {
-                var unmanaged = new PRJ_PLACEHOLDER_VERSION_INFO_UNMANGED();
-                Marshal.Copy(managed.ProviderID, 0, (nint)unmanaged.ProviderID, IdLength);
-                Marshal.Copy(managed.ContentID, 0, (nint)unmanaged.ContentID, IdLength);
-
-                return unmanaged;
-            }
+            public fixed byte ProviderID[(int)PRJ_PLACEHOLDER_ID.PRJ_PLACEHOLDER_ID_LENGTH];
+            public fixed byte ContentID[(int)PRJ_PLACEHOLDER_ID.PRJ_PLACEHOLDER_ID_LENGTH];
         }
 
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/ns-projectedfslib-prj_placeholder_version_info
         internal struct PRJ_PLACEHOLDER_VERSION_INFO
         {
+            public const int IdLength = (int)PRJ_PLACEHOLDER_ID.PRJ_PLACEHOLDER_ID_LENGTH;
+
             public PRJ_PLACEHOLDER_VERSION_INFO()
             {
-                ProviderID = new byte[(int)PRJ_PLACEHOLDER_ID.PRJ_PLACEHOLDER_ID_LENGTH];
-                ContentID = new byte[(int)PRJ_PLACEHOLDER_ID.PRJ_PLACEHOLDER_ID_LENGTH];
+                ProviderID = new byte[IdLength];
+                ContentID = new byte[IdLength];
             }
 
             // max length is PRJ_PLACEHOLDER_ID.PRJ_PLACEHOLDER_ID_LENGTH
@@ -210,85 +171,26 @@ namespace ProjFS.Native
             public byte[] ContentID;
         }
 
-        [CustomMarshaller(typeof(PRJ_STARTVIRTUALIZING_OPTIONS), MarshalMode.ManagedToUnmanagedIn, typeof(PrjStartVirtualizingMarshaller))]
-        internal static unsafe class PrjStartVirtualizingMarshaller
-        {
-            private const int EnumSize = sizeof(PRJ_NOTIFY_TYPES);
-            private static readonly int StringSize = sizeof(IntPtr);
-
-            internal struct PRJ_STARTVIRTUALIZING_OPTIONS_UNMANAGED
-            {
-                public PRJ_STARTVIRTUALIZING_FLAGS Flags;
-                public uint PoolThreadCount;
-                public uint ConcurrentThreadCount;
-                public IntPtr NotificationMappings;
-                public uint NotificationMappingsCount;
-            }
-
-            internal unsafe struct PRJ_NOTIFICATION_MAPPING_UNMANAGED
-            {
-                public PRJ_NOTIFY_TYPES NotificationBitMask;
-                public ushort* NotificationRoot;
-            }
-
-            public static PRJ_STARTVIRTUALIZING_OPTIONS_UNMANAGED ConvertToUnmanaged(PRJ_STARTVIRTUALIZING_OPTIONS managed)
-            {
-                var unmanaged = new PRJ_STARTVIRTUALIZING_OPTIONS_UNMANAGED()
-                {
-                    Flags = managed.Flags,
-                    PoolThreadCount = managed.PoolThreadCount,
-                    ConcurrentThreadCount = managed.ConcurrentThreadCount,
-                };
-
-                if (managed.NotificationMappings is null)
-                {
-                    unmanaged.NotificationMappings = IntPtr.Zero;
-                    unmanaged.NotificationMappingsCount = 0;
-                }
-                else
-                {
-
-                    int arraySize = checked((EnumSize + StringSize) * managed.NotificationMappings.Length);
-                    unmanaged.NotificationMappings = Marshal.AllocCoTaskMem(arraySize);
-                    int offset = 0;
-
-                    foreach (var mapping in managed.NotificationMappings)
-                    {
-                        Marshal.WriteInt32(unmanaged.NotificationMappings, offset, (int)mapping.NotificationBitMask);
-                        offset += EnumSize;
-
-                        var unmanagedString = (IntPtr)Utf16StringMarshaller.ConvertToUnmanaged(mapping.NotificationRoot ?? "");
-                        Marshal.WriteIntPtr(unmanaged.NotificationMappings, offset, unmanagedString);
-                        offset += StringSize;
-                    }
-                }
-
-                return unmanaged;
-            }
-
-            public static void Free(PRJ_STARTVIRTUALIZING_OPTIONS_UNMANAGED unmanaged)
-            {
-                int offset = 0;
-                for (int i = 0; i < unmanaged.NotificationMappingsCount; i++)
-                {
-                    offset += EnumSize;
-                    Utf16StringMarshaller.Free((ushort*)(unmanaged.NotificationMappings + offset));
-                    offset += StringSize;
-                }
-
-                Marshal.FreeCoTaskMem(unmanaged.NotificationMappings);
-            }
-        }
-
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/ns-projectedfslib-prj_startvirtualizing_options
         [StructLayout(LayoutKind.Sequential)]
-        internal unsafe struct PRJ_STARTVIRTUALIZING_OPTIONS
+        internal unsafe struct PRJ_STARTVIRTUALIZING_OPTIONS_UNMANAGED
         {
             public PRJ_STARTVIRTUALIZING_FLAGS Flags;
             public uint PoolThreadCount;
             public uint ConcurrentThreadCount;
-            public PRJ_NOTIFICATION_MAPPING[] NotificationMappings; 
+            public PRJ_NOTIFICATION_MAPPING_UNMANAGED* NotificationMappings;
             public uint NotificationMappingsCount;
+        }
+
+        /// <summary>
+        /// Managed version of <see cref="PRJ_STARTVIRTUALIZING_OPTIONS"/>.
+        /// </summary>
+        internal struct PRJ_STARTVIRTUALIZING_OPTIONS
+        {
+            public PRJ_STARTVIRTUALIZING_FLAGS Flags;
+            public uint PoolThreadCount;
+            public uint ConcurrentThreadCount;
+            public PRJ_NOTIFICATION_MAPPING[] NotificationMappings;
         }
 
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/ns-projectedfslib-prj_virtualization_instance_info

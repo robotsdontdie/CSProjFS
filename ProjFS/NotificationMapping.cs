@@ -1,4 +1,4 @@
-﻿namespace ProjFS
+﻿namespace CSProjFS
 {
     /// <summary>
     /// Represents a path relative to a virtualization root and the notification bit mask that should apply to it.

@@ -1,6 +1,6 @@
-﻿using static ProjFS.Native.ProjectedFSLib.PRJ_UPDATE_FAILURE_CAUSES;
+﻿using static CSProjFS.Native.ProjectedFSLib.PRJ_UPDATE_FAILURE_CAUSES;
 
-namespace ProjFS
+namespace CSProjFS
 {
     /// <summary>
     /// Defines values that describe why an attempt to update or delete a file in a virtualization

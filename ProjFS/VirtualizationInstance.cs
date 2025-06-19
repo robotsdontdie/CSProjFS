@@ -1,11 +1,13 @@
 ﻿using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
-using ProjFS;
-using static ProjFS.Native.ProjectedFSLib;
+using CSProjFS;
+using static CSProjFS.Native.Marshallers;
+using static CSProjFS.Native.ProjectedFSLib;
 
-namespace ProjFS
+namespace CSProjFS
 {
     public class VirtualizationInstance
     {
@@ -37,6 +39,7 @@ namespace ProjFS
             this.virtualizationRootPath = virtualizationRootPath;
             this.poolThreadCount = poolThreadCount;
             this.concurrentThreadCount = concurrentThreadCount;
+            this.enableNegativePathCache = enableNegativePathCache;
             this.notificationMappings = [.. notificationMappings];
 
             bool markAsRoot = false;
@@ -253,12 +256,12 @@ namespace ProjFS
 
                 if (OnQueryFileName is not null)
                 {
-                    callbacks.QueryFileNameCallback = &QueryFileNameCallback;
+                    //callbacks.QueryFileNameCallback = &QueryFileNameCallback;
                 }
 
                 if (OnCancelCommand is not null)
                 {
-                    callbacks.CancelCommandCallback = &CancelCommandCallback;
+                    //callbacks.CancelCommandCallback = &CancelCommandCallback;
                 }
 
                 if (OnNotifyFileOpened is not null
@@ -273,7 +276,7 @@ namespace ProjFS
                     || OnNotifyFileHandleClosedFileModifiedOrDeleted is not null
                     || OnNotifyFilePreConvertToFull is not null)
                 {
-                    callbacks.NotificationCallback = &NotificationCallback;
+                    //callbacks.NotificationCallback = &NotificationCallback;
                 }
             }
 
@@ -292,10 +295,9 @@ namespace ProjFS
                         NotificationBitMask = (PRJ_NOTIFY_TYPES)m.NotificationMask,
                         NotificationRoot = m.NotificationRoot,
                     }).ToArray();
-                startOptions.NotificationMappingsCount = (uint)notificationMappings.Count;
             }
 
-            var result = PrjStartVirtualizing(virtualizationRootPath, ref callbacks, instanceContext, startOptions, out virtualizationContext);
+            var result = PrjStartVirtualizing(virtualizationRootPath, callbacks, instanceContext, startOptions, out virtualizationContext);
 
             if (result != HResult.Ok)
             {
@@ -399,7 +401,7 @@ namespace ProjFS
                     virtualizationContext,
                     relativePath,
                     placeholderInfo,
-                    (uint)placeholderInfo.Size);
+                    (uint)PRJ_PLACEHOLDER_INFO.Size);
         }
 
         public HResult WritePlaceholderInfo2(
@@ -437,7 +439,7 @@ namespace ProjFS
                     virtualizationContext,
                     relativePath,
                     placeholderInfo,
-                    (uint)placeholderInfo.Size);
+                    (uint)PRJ_PLACEHOLDER_INFO.Size);
             }
 
             var extendedInfo = new PRJ_EXTENDED_INFO
@@ -450,7 +452,7 @@ namespace ProjFS
                 virtualizationContext,
                 relativePath,
                 placeholderInfo,
-                (uint)placeholderInfo.Size,
+                (uint)PRJ_PLACEHOLDER_INFO.Size,
                 extendedInfo);
         }
 
@@ -484,7 +486,7 @@ namespace ProjFS
                 virtualizationContext,
                 relativePath,
                 placeholderInfo,
-                (uint)placeholderInfo.Size,
+                (uint)PRJ_PLACEHOLDER_INFO.Size,
                 (PRJ_UPDATE_TYPES)updateFlags,
                 out updateFailureCause);
 
@@ -617,59 +619,62 @@ namespace ProjFS
                 virtualizationInstanceGuid);
             
         }
-        
+
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/nc-projectedfslib-prj_start_directory_enumeration_cb
-        private static HResult StartDirectoryEnumerationCallback(ref PRJ_CALLBACK_DATA callbackData, ref Guid enumerationId)
+        [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+        private static unsafe HResult StartDirectoryEnumerationCallback(PRJ_CALLBACK_DATA_UNMANAGED* callbackDataPtr, Guid* enumerationIdPtr)
         {
+            PRJ_CALLBACK_DATA callbackData = PrjCallbackDataMarshaller.ConvertToManaged(callbackDataPtr);
+            ref Guid enumerationId = ref Unsafe.AsRef<Guid>(enumerationIdPtr);
+
             if (!TryGetInstanceCallbacks(callbackData, out _, out var callbacks))
             {
                 return HResult.InternalError;
             }
 
-            unsafe
+            if (callbackData.FilePathName is null)
             {
-                string? filePathName = Utf16StringMarshaller.ConvertToManaged(callbackData.FilePathName);
-                if (filePathName is null)
-                {
-                    return HResult.InvalidArg;
-                }
-
-                string? triggeringProcessFilename = Utf16StringMarshaller.ConvertToManaged(callbackData.TriggeringProcessImageFileName);
-
-                return callbacks.StartDirectoryEnumerationCallback(
-                    callbackData.CommandId,
-                    enumerationId,
-                    filePathName,
-                    callbackData.TriggeringProcessId,
-                    triggeringProcessFilename);
+                return HResult.InvalidArg;
             }
+
+            HResult result = callbacks.StartDirectoryEnumerationCallback(
+                callbackData.CommandId,
+                enumerationId,
+                callbackData.FilePathName,
+                callbackData.TriggeringProcessId,
+                callbackData.TriggeringProcessImageFileName);
+
+            return result;
         }
 
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/nc-projectedfslib-prj_get_directory_enumeration_cb
-        private static unsafe HResult GetDirectoryEnumerationCallback(ref PRJ_CALLBACK_DATA callbackData, ref Guid enumerationId, ushort* searchString, IntPtr dirEntryBufferHandle)
+        [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+        private static unsafe HResult GetDirectoryEnumerationCallback(PRJ_CALLBACK_DATA_UNMANAGED* callbackDataPtr, Guid* enumerationIdPtr, ushort* searchString, IntPtr dirEntryBufferHandle)
         {
+            PRJ_CALLBACK_DATA callbackData = PrjCallbackDataMarshaller.ConvertToManaged(callbackDataPtr);
+            ref Guid enumerationId = ref Unsafe.AsRef<Guid>(enumerationIdPtr);
+            string? managedSearchString = Utf16StringMarshaller.ConvertToManaged(searchString);
 
             if (!TryGetInstanceCallbacks(callbackData, out _, out var callbacks))
             {
                 return HResult.InternalError;
             }
 
-            unsafe
-            {
-                string? managedSearchString = Utf16StringMarshaller.ConvertToManaged(searchString);
-
-                return callbacks.GetDirectoryEnumerationCallback(
-                    callbackData.CommandId,
-                    enumerationId,
-                    managedSearchString,
-                    callbackData.Flags.HasFlag(PRJ_CALLBACK_DATA_FLAGS.PRJ_CB_DATA_FLAG_ENUM_RESTART_SCAN),
-                    new DirectoryEnumerationResults(dirEntryBufferHandle));
-            }
+            return callbacks.GetDirectoryEnumerationCallback(
+                callbackData.CommandId,
+                enumerationId,
+                managedSearchString,
+                callbackData.Flags.HasFlag(PRJ_CALLBACK_DATA_FLAGS.PRJ_CB_DATA_FLAG_ENUM_RESTART_SCAN),
+                new DirectoryEnumerationResults(dirEntryBufferHandle));
         }
 
         // https://learn.microsoft.com/en-us/windows/win32/api/projectedfslib/nc-projectedfslib-prj_end_directory_enumeration_cb
-        private static HResult EndDirectoryEnumerationCallback(ref PRJ_CALLBACK_DATA callbackData, ref Guid enumerationId)
+        [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+        private static unsafe HResult EndDirectoryEnumerationCallback(PRJ_CALLBACK_DATA_UNMANAGED* callbackDataPtr, Guid* enumerationIdPtr)
         {
+            PRJ_CALLBACK_DATA callbackData = PrjCallbackDataMarshaller.ConvertToManaged(callbackDataPtr);
+            ref Guid enumerationId = ref Unsafe.AsRef<Guid>(enumerationIdPtr);
+
             if (!TryGetInstanceCallbacks(callbackData, out _, out var callbacks))
             {
                 return HResult.InternalError;
@@ -678,8 +683,12 @@ namespace ProjFS
             return callbacks.EndDirectoryEnumerationCallback(enumerationId);
         }
 
-        private static HResult GetPlaceholderInfoCallback(ref PRJ_CALLBACK_DATA callbackData)
+        //private static HResult GetPlaceholderInfoCallback(ref PRJ_CALLBACK_DATA callbackData)
+        [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+        private static unsafe HResult GetPlaceholderInfoCallback(PRJ_CALLBACK_DATA_UNMANAGED* callbackDataPtr)
         {
+            PRJ_CALLBACK_DATA callbackData = PrjCallbackDataMarshaller.ConvertToManaged(callbackDataPtr);
+
             if (!TryGetInstanceCallbacks(callbackData, out _, out var callbacks))
             {
                 return HResult.InternalError;
@@ -687,24 +696,25 @@ namespace ProjFS
 
             unsafe
             {
-                string? filePathName = Utf16StringMarshaller.ConvertToManaged(callbackData.FilePathName);
-                if (filePathName is null)
+                if (callbackData.FilePathName is null)
                 {
                     return HResult.InvalidArg;
                 }
-
-                string? triggeringProcessFilename = Utf16StringMarshaller.ConvertToManaged(callbackData.TriggeringProcessImageFileName);
 
                 return callbacks.GetPlaceholderInfoCallback(
                     callbackData.CommandId,
-                    filePathName,
+                    callbackData.FilePathName,
                     callbackData.TriggeringProcessId,
-                    triggeringProcessFilename);
+                    callbackData.TriggeringProcessImageFileName);
             }
         }
 
-        private static HResult GetFileDataCallback(ref PRJ_CALLBACK_DATA callbackData, ulong byteOffset, uint length)
+        //private static HResult GetFileDataCallback(ref PRJ_CALLBACK_DATA callbackData, ulong byteOffset, uint length)
+        [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+        private static unsafe HResult GetFileDataCallback(PRJ_CALLBACK_DATA_UNMANAGED* callbackDataPtr, ulong byteOffset, uint length)
         {
+            PRJ_CALLBACK_DATA callbackData = PrjCallbackDataMarshaller.ConvertToManaged(callbackDataPtr);
+
             if (!TryGetInstanceCallbacks(callbackData, out _, out var callbacks))
             {
                 return HResult.InternalError;
@@ -712,37 +722,28 @@ namespace ProjFS
 
             unsafe
             {
-                string? filePathName = Utf16StringMarshaller.ConvertToManaged(callbackData.FilePathName);
-                if (filePathName is null)
+                if (callbackData.FilePathName is null)
                 {
                     return HResult.InvalidArg;
                 }
 
-                string? triggeringProcessFilename = Utf16StringMarshaller.ConvertToManaged(callbackData.TriggeringProcessImageFileName);
-
-                var providerId = new byte[IdLength];
-                Marshal.Copy(callbackData.VersionInfo, providerId, 0, IdLength);
-
-                var contentId = new byte[IdLength];
-                Marshal.Copy(callbackData.VersionInfo + IdLength, contentId, 0, IdLength);
-
-
-
                 return callbacks.GetFileDataCallback(
                     callbackData.CommandId,
-                    filePathName,
+                    callbackData.FilePathName,
                     byteOffset,
                     length,
                     callbackData.DataStreamId,
-                    contentId,
-                    providerId,
+                    callbackData.VersionInfo?.ContentID ?? new byte[PRJ_PLACEHOLDER_VERSION_INFO.IdLength],
+                    callbackData.VersionInfo?.ProviderID ?? new byte[PRJ_PLACEHOLDER_VERSION_INFO.IdLength],
                     callbackData.TriggeringProcessId,
-                    triggeringProcessFilename);
+                    callbackData.TriggeringProcessImageFileName);
             }
         }
 
-        private static HResult QueryFileNameCallback(ref PRJ_CALLBACK_DATA callbackData)
+        private static unsafe HResult QueryFileNameCallback(PRJ_CALLBACK_DATA_UNMANAGED* callbackDataPtr)
         {
+            PRJ_CALLBACK_DATA callbackData = PrjCallbackDataMarshaller.ConvertToManaged(callbackDataPtr);
+
             if (!TryGetInstanceCallbacks(callbackData, out var instance, out _))
             {
                 return HResult.InternalError;
@@ -755,19 +756,20 @@ namespace ProjFS
 
             unsafe
             {
-                string? filePathName = Utf16StringMarshaller.ConvertToManaged(callbackData.FilePathName);
-                if (filePathName is null)
+                if (callbackData.FilePathName is null)
                 {
                     return HResult.InvalidArg;
                 }
 
-                return callback(filePathName);
+                return callback(callbackData.FilePathName);
             }
         }
 
-        private static void CancelCommandCallback(ref PRJ_CALLBACK_DATA callbackData)
+        private static unsafe void CancelCommandCallback(PRJ_CALLBACK_DATA_UNMANAGED* callbackDataPtr)
         {
-            if (!TryGetInstanceCallbacks(callbackData, out var instance, out _))
+            PRJ_CALLBACK_DATA callbackData = PrjCallbackDataMarshaller.ConvertToManaged(callbackDataPtr);
+
+            if (!TryGetInstanceCallbacks(default, out var instance, out _))
             {
                 return;
             }
@@ -780,22 +782,28 @@ namespace ProjFS
             callback(callbackData.CommandId);
         }
 
-        private static unsafe HResult NotificationCallback(ref PRJ_CALLBACK_DATA callbackData, int isDirectory, PRJ_NOTIFICATION notification, ushort* destinationFileName, PRJ_NOTIFICATION_PARAMETERS* notificationParameters)
+        private static unsafe HResult NotificationCallback(
+            PRJ_CALLBACK_DATA_UNMANAGED* callbackDataPtr,
+            int isDirectory,
+            PRJ_NOTIFICATION notification,
+            ushort* destinationFileName,
+            PRJ_NOTIFICATION_PARAMETERS* notificationParameters)
         {
-            if (!TryGetInstanceCallbacks(callbackData, out var instance, out _))
+            PRJ_CALLBACK_DATA callbackData = PrjCallbackDataMarshaller.ConvertToManaged(callbackDataPtr);
+            string? destinationPath = Utf16StringMarshaller.ConvertToManaged(destinationFileName);
+
+            if (!TryGetInstanceCallbacks(default, out var instance, out _))
             {
                 return HResult.InternalError;
             }
 
-            string? filePathName = Utf16StringMarshaller.ConvertToManaged(callbackData.FilePathName);
+            string? filePathName = callbackData.FilePathName;
             if (filePathName is null)
             {
                 return HResult.InvalidArg;
             }
 
-            string? destinationPath = Utf16StringMarshaller.ConvertToManaged(destinationFileName);
-
-            string? triggeringProcessFilename = Utf16StringMarshaller.ConvertToManaged(callbackData.TriggeringProcessImageFileName);
+            string? triggeringProcessFilename = callbackData.TriggeringProcessImageFileName;
 
             var result = HResult.Ok;
             NotificationType notificationMask = 0;
@@ -959,6 +967,13 @@ namespace ProjFS
             [NotNullWhen(true)] out VirtualizationInstance? virtualizationInstance,
             [NotNullWhen(true)] out IRequiredCallbacks? callbacks)
         {
+            if (callbackData.Size < 96)
+            {
+                virtualizationInstance = null;
+                callbacks = null;
+                return false;
+            }
+
             int instanceContext = (int)callbackData.InstanceContext;
             if (!instances.TryGetValue(instanceContext, out virtualizationInstance))
             {

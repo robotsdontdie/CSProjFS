@@ -1,4 +1,4 @@
-﻿namespace ProjFS
+﻿namespace CSProjFS
 {
     //
     // Summary:

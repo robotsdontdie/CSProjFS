@@ -1,10 +1,9 @@
 ﻿using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 
 // The managed ProjFS library has some global scope delegates so we put those here.
 // Also a convenient place to put this assembly attribute.
 [assembly: DisableRuntimeMarshalling]
-namespace ProjFS
+namespace CSProjFS
 {
     /// <summary>Determines whether a given file path exists in the provider's store.</summary>
     /// <remarks>

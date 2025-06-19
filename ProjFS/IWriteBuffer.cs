@@ -1,4 +1,4 @@
-﻿namespace ProjFS
+﻿namespace CSProjFS
 {
     /// <summary>
     /// Interface to allow for easier unit testing of a virtualization provider.
